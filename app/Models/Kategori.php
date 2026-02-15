@@ -39,3 +39,5 @@ class Kategori extends Model
         });
     }
 }
+
+
