@@ -6,7 +6,7 @@ use App\Filament\Resources\EoqResource;
 use Filament\Actions;
 use Filament\Resources\Pages\ManageRecords;
 
-class ManageEoqs extends ManageRecords
+class ManageEoq extends ManageRecords
 {
     protected static string $resource = EoqResource::class;
 

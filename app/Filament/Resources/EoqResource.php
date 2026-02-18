@@ -53,62 +53,64 @@ class EoqResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return Barang::query()
-            ->leftJoinSub(
-                DB::table('barang_keluar')
-                    ->select(
-                        'id_barang',
-                        DB::raw('SUM(jumlah_keluar) AS permintaan_tahunan')
-                    )
-                    ->groupBy('id_barang'),
-                'bk',
-                'barang.id_barang',
-                '=',
-                'bk.id_barang'
-            )
-            ->select(
-                'barang.*',
-                DB::raw('IFNULL(bk.permintaan_tahunan,0) AS permintaan_tahunan'),
-                DB::raw("
-                    CASE
-                        WHEN barang.biaya_simpan > 0
-                             AND IFNULL(bk.permintaan_tahunan,0) > 0
-                        THEN ROUND(
-                            SQRT(
-                                (2 * bk.permintaan_tahunan * barang.biaya_pesan)
-                                / barang.biaya_simpan
-                            ), 2
-                        )
-                        ELSE 0
-                    END AS eoq
-                "),
-                DB::raw("
-                    CASE
-                        WHEN IFNULL(bk.permintaan_tahunan,0) > 0
-                            AND (
-                                CASE
-                                    WHEN barang.biaya_simpan > 0
-                                    THEN SQRT((2 * bk.permintaan_tahunan * barang.biaya_pesan) / barang.biaya_simpan)
-                                    ELSE 0
-                                END
-                            ) > 0
-                        THEN ROUND(
-                            IFNULL(bk.permintaan_tahunan,0) /
-                            (
-                                SQRT((2 * bk.permintaan_tahunan * barang.biaya_pesan) / barang.biaya_simpan)
-                            ),
-                        2)
-                        ELSE 0
-                    END AS frekuensi_pesan
-                "),
+        return Eoq::query()
+            ->with(['barang.kategori']);
+        // return Barang::query()
+        //     ->leftJoinSub(
+        //         DB::table('barang_keluar')
+        //             ->select(
+        //                 'id_barang',
+        //                 DB::raw('SUM(jumlah_keluar) AS permintaan_tahunan')
+        //             )
+        //             ->groupBy('id_barang'),
+        //         'bk',
+        //         'barang.id_barang',
+        //         '=',
+        //         'bk.id_barang'
+        //     )
+        //     ->select(
+        //         'barang.*',
+        //         DB::raw('IFNULL(bk.permintaan_tahunan,0) AS permintaan_tahunan'),
+        //         DB::raw("
+        //             CASE
+        //                 WHEN barang.biaya_simpan > 0
+        //                      AND IFNULL(bk.permintaan_tahunan,0) > 0
+        //                 THEN ROUND(
+        //                     SQRT(
+        //                         (2 * bk.permintaan_tahunan * barang.biaya_pesan)
+        //                         / barang.biaya_simpan
+        //                     ), 2
+        //                 )
+        //                 ELSE 0
+        //             END AS eoq
+        //         "),
+        //         DB::raw("
+        //             CASE
+        //                 WHEN IFNULL(bk.permintaan_tahunan,0) > 0
+        //                     AND (
+        //                         CASE
+        //                             WHEN barang.biaya_simpan > 0
+        //                             THEN SQRT((2 * bk.permintaan_tahunan * barang.biaya_pesan) / barang.biaya_simpan)
+        //                             ELSE 0
+        //                         END
+        //                     ) > 0
+        //                 THEN ROUND(
+        //                     IFNULL(bk.permintaan_tahunan,0) /
+        //                     (
+        //                         SQRT((2 * bk.permintaan_tahunan * barang.biaya_pesan) / barang.biaya_simpan)
+        //                     ),
+        //                 2)
+        //                 ELSE 0
+        //             END AS frekuensi_pesan
+        //         "),
 
-                DB::raw("
-                    ROUND(
-                        IFNULL(bk.permintaan_tahunan,0),
-                    2) AS total_pemesanan
-            "),
+        //         DB::raw("
+        //             ROUND(
+        //                 IFNULL(bk.permintaan_tahunan,0),
+        //             2) AS total_pemesanan
+        //     "),
 
-            );
+        //     );
     }
 
     /* ================= TABLE ================= */
@@ -221,6 +223,7 @@ class EoqResource extends Resource
 
                             Eoq::create([
                                 'id_barang'          => $row->id_barang,
+                                'id_kategori'        => $row->id_kategori,
                                 'tahun'              => $tahun,
                                 'permintaan_tahunan' => $row->permintaan_tahunan,
                                 'biaya_pesan'        => $row->biaya_pesan,
@@ -332,15 +335,15 @@ class EoqResource extends Resource
             ])
 
             /* ================= KOLOM ================= */
-
+            ->defaultSort(null)
             ->columns([
                 Tables\Columns\TextColumn::make('id_barang')->label('ID'),
-                Tables\Columns\TextColumn::make('nama_barang')->label('Nama Barang')->searchable(),
-                Tables\Columns\TextColumn::make('kategori.nama_kategori')->label('Kategori'),
+                Tables\Columns\TextColumn::make('barang.nama_barang')->label('Nama Barang')->searchable(),
+                // Tables\Columns\TextColumn::make('kategori.nama_kategori')->label('Kategori'),
                 Tables\Columns\TextColumn::make('permintaan_tahunan')->label('Permintaan Tahunan'),
                 Tables\Columns\TextColumn::make('biaya_pesan')->money('IDR'),
                 Tables\Columns\TextColumn::make('biaya_simpan')->money('IDR'),
-                Tables\Columns\TextColumn::make('eoq')->label('EOQ'),
+                Tables\Columns\TextColumn::make('nilai_eoq')->label('EOQ'),
                 Tables\Columns\TextColumn::make('frekuensi_pesan')->label('Frekuensi Pesan (kali/tahun)')->numeric(2),
                 Tables\Columns\TextColumn::make('total_pemesanan')->label('Total Pemesanan Tahunan'),
 
@@ -372,7 +375,21 @@ class EoqResource extends Resource
 
                 Tables\Filters\SelectFilter::make('id_kategori')
                     ->label('Kategori')
-                    ->relationship('kategori', 'nama_kategori'),
+                    ->options(
+                        \App\Models\Kategori::pluck('nama_kategori', 'id_kategori')->toArray()
+                    )
+                    ->query(function (\Illuminate\Database\Eloquent\Builder $query, array $data) {
+                        if (!$data['value']) {
+                            return $query;
+                        }
+
+                        return $query->whereHas('barang', function ($q) use ($data) {
+                            $q->where('id_kategori', $data['value']);
+                        });
+                    }),
+
+                // ->label('Kategori')
+                // ->relationship('kategori', 'nama_kategori'),
             ]);
     }
 

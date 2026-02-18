@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class Eoq extends Model
 {
     protected $table = 'eoq';
-
+    protected $primaryKey = 'id_eoq'; // ← GANTI sesuai PK tabel eoq kamu
+    public $incrementing = true;
+    protected $keyType = 'int';
     protected $fillable = [
         'id_barang',
         'tahun',
@@ -31,4 +33,5 @@ class Eoq extends Model
     {
         return $this->belongsTo(Barang::class, 'id_barang', 'id_barang');
     }
+
 }

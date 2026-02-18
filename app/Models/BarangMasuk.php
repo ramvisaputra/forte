@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use App\Models\User;
 use App\Models\Barang;
-use Illuminate\Support\Facades\DB;
 
 class BarangMasuk extends Model
 {
@@ -23,6 +23,8 @@ class BarangMasuk extends Model
         'total_harga',
     ];
 
+    /* ================= RELATION ================= */
+
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'id');
@@ -33,65 +35,57 @@ class BarangMasuk extends Model
         return $this->belongsTo(Barang::class, 'id_barang', 'id_barang');
     }
 
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($model) {
-            // Ambil ID terbaru
-            $lastId = BarangMasuk::max('id_masuk');
-
-            if (!$lastId) {
-                $model->id_masuk = 'BM001';
-            } else {
-                $number = (int) substr($lastId, 2) + 1;
-                $model->id_masuk = 'BM' . str_pad($number, 3, '0', STR_PAD_LEFT);
-            }
-        });
-    }
+    /* ================= MODEL EVENT ================= */
 
     protected static function booted()
     {
+        /**
+         * BEFORE INSERT
+         */
         static::creating(function ($row) {
 
+            /* === GENERATE ID BM === */
+            $lastId = self::max('id_masuk');
+
+            $row->id_masuk = $lastId
+                ? 'BM' . str_pad(((int) substr($lastId, 2)) + 1, 3, '0', STR_PAD_LEFT)
+                : 'BM001';
+
+            /* === VALIDASI JUMLAH === */
             if ($row->jumlah_masuk <= 0) {
-                throw new \Exception('Jumlah Barang masuk tidak valid');
+                throw new \Exception('Jumlah barang masuk tidak valid');
             }
 
-            $barang = Barang::where('id_barang', $row->id_barang)->first();
+            /* === AMBIL BARANG === */
+            $barang = Barang::where('id_barang', $row->id_barang)->firstOrFail();
 
-            if (!$barang) {
-                throw new \Exception('Barang tidak ditemukan');
-            }
-
+            /* === HITUNG TOTAL HARGA (SERVER SIDE) === */
             $row->total_harga = $row->jumlah_masuk * $barang->harga_masuk;
         });
 
+        /**
+         * AFTER INSERT → TAMBAH STOK
+         */
         static::created(function ($row) {
-            $barang = Barang::where('id_barang', $row->id_barang)->first();
-
-            if ($barang) {
-                $barang->stok += $row->jumlah_masuk;
-                $barang->save();
-            };
+            Barang::where('id_barang', $row->id_barang)
+                ->increment('stok', $row->jumlah_masuk);
         });
 
+        /**
+         * BEFORE DELETE → KURANGI STOK
+         */
         static::deleting(function ($row) {
             DB::transaction(function () use ($row) {
 
                 $barang = Barang::where('id_barang', $row->id_barang)
                     ->lockForUpdate()
-                    ->first();
+                    ->firstOrFail();
 
-                if ($barang) {
-                    $barang->stok -= $row->jumlah_masuk;
-
-                    if ($barang->stok < 0) {
-                        throw new \Exception('Stok tidak boleh kurang dari 0');
-                    }
-
-                    $barang->save();
+                if ($barang->stok < $row->jumlah_masuk) {
+                    throw new \Exception('Stok tidak mencukupi untuk penghapusan');
                 }
+
+                $barang->decrement('stok', $row->jumlah_masuk);
             });
         });
     }

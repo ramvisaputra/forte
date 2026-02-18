@@ -198,32 +198,6 @@ class BarangMasukResource extends Resource
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make()
-                    ->before(function ($record) {
-
-                        DB::beginTransaction();
-
-                        $barang = $record->barang;
-
-                        // Validasi stok
-                        if (($barang->stok - $record->jumlah_masuk) < 0) {
-
-                            DB::rollBack();
-
-                            Notification::make()
-                                ->title('Penghapusan Gagal')
-                                ->body('Stok tidak boleh kurang dari 0')
-                                ->danger()
-                                ->send();
-
-                            // Hentikan proses delete
-                            throw new \Filament\Support\Exceptions\Halt();
-                        }
-
-                        // Kurangi stok
-                        $barang->decrement('stok', $record->jumlah_masuk);
-
-                        DB::commit();
-                    })
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

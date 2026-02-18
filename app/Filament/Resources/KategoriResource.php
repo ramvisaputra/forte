@@ -102,15 +102,15 @@ class KategoriResource extends Resource
                     })
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Dibuat')
-                    ->dateTime()
-                    ->sortable(),
+                // Tables\Columns\TextColumn::make('created_at')
+                //     ->label('Dibuat')
+                //     ->dateTime()
+                //     ->sortable(),
 
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->label('Diperbarui')
-                    ->dateTime()
-                    ->sortable(),
+                // Tables\Columns\TextColumn::make('updated_at')
+                //     ->label('Diperbarui')
+                //     ->dateTime()
+                //     ->sortable(),
             ])
             ->filters([
                 //
