@@ -61,10 +61,6 @@ class KategoriResource extends Resource
     {
         return $form
             ->schema([
-                // Forms\Components\TextInput::make('id_kategori')
-                //     ->label('Id Kategori')
-                //     ->disabled()
-                //     ->dehydrated(false),
                 Forms\Components\TextInput::make('nama_kategori')
                     ->label('Nama Kategori')
                     ->required()
@@ -89,7 +85,7 @@ class KategoriResource extends Resource
                     ->searchable()
                     ->sortable(),
                 Tables\Columns\TextColumn::make('nama_kategori')
-                    ->label('Kategori')
+                    ->label('Nama Kategori')
                     ->searchable()
                     ->sortable(),
 
@@ -116,9 +112,9 @@ class KategoriResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
+                Tables\Actions\ViewAction::make()->iconButton(),
+                Tables\Actions\EditAction::make()->iconButton(),
+                Tables\Actions\DeleteAction::make()->iconButton()
                     ->requiresConfirmation()
                     ->modalHeading('Konfirmasi Penghapusan Kategori')
                     ->modalDescription(function ($record) {
@@ -146,7 +142,7 @@ class KategoriResource extends Resource
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ]);
     }

@@ -1,7 +1,6 @@
 <?php
 
 namespace App\Filament\Resources;
-
 use Filament\Forms;
 use Filament\Tables;
 use App\Models\Barang;
@@ -17,6 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\DB;
 use Filament\Notifications\Notification;
+use Filament\Support\RawJs;
 
 class BarangMasukResource extends Resource
 {
@@ -103,7 +103,7 @@ class BarangMasukResource extends Resource
                     // Harga barang
                     $barang = Barang::where('id_barang', $state)->first();
                     if ($barang) {
-                        $set('harga_barang', $barang->harga_masuk);
+                        $set('harga_barang', number_format($barang->harga_masuk, 0, ',', '.'));
                     }
 
                     // 🔥 AMBIL EOQ TERBARU (BUKAN BERDASARKAN TANGGAL)
@@ -114,7 +114,7 @@ class BarangMasukResource extends Resource
                     $set(
                         'info_eoq',
                         $eoq
-                            ? 'Perhitungan EOQ Tahun ' . $eoq->tahun . ' : ' . number_format($eoq->nilai_eoq, 2, ',', '.')
+                            ? ' ' . $eoq->tahun . ' : ' . number_format($eoq->nilai_eoq, 0, ',', '.')
                             : 'EOQ belum dihitung'
                     );
                 }),
@@ -122,16 +122,24 @@ class BarangMasukResource extends Resource
             /* INFO EOQ */
             Forms\Components\TextInput::make('info_eoq')
                 ->label('Informasi EOQ')
-                ->disabled()
+                ->readOnly()
                 ->dehydrated(false)
-                ->reactive()
-                ->default('EOQ belum dihitung'),
+                ->default('EOQ belum dihitung')
+                
+                ->extraInputAttributes(fn($state) => [
+                    'class' => filled($state)
+                        ? 'text-success-600 font-semibold'
+                        : 'text-danger-600 font-semibold',
+                ])
+                ,
 
             Forms\Components\TextInput::make('harga_barang')
                 ->label('Harga Barang')
                 ->numeric()
-                ->disabled()
-                ->dehydrated(false),
+                ->dehydrated()
+                ->dehydrateStateUsing(fn($state) => str_replace('.', '', $state))
+                ->required()
+                ->disabled(),
 
             Forms\Components\TextInput::make('jumlah_masuk')
                 ->label('Jumlah Masuk (/Box)')
@@ -157,14 +165,20 @@ class BarangMasukResource extends Resource
                     $barang = Barang::where('id_barang', $get('id_barang'))->first();
 
                     if ($barang) {
-                        $set('total_harga', $state * $barang->harga_masuk);
+                        $total = $state * $barang->harga_masuk;
+
+                        // format sebelum ditampilkan
+                        $set('total_harga', number_format($total, 0, ',', '.'));
                     }
                 }),
 
             Forms\Components\TextInput::make('total_harga')
                 ->label('Total Harga')
-                ->numeric()
+                //->numeric()
                 ->disabled()
+                ->live()
+                ->dehydrated()
+                ->dehydrateStateUsing(fn($state) => str_replace('.', '', $state))
         ]);
     }
 
@@ -181,23 +195,21 @@ class BarangMasukResource extends Resource
                 ->label('Tanggal Masuk')
                 ->date()
                 ->date('j M Y')
-                ->searchable()
-                ->sortable(),
+                ->searchable(),
             Tables\Columns\TextColumn::make('user.name')
                 ->label('Dicatat Oleh')
-                ->searchable()
-                ->sortable(),
-            Tables\Columns\TextColumn::make('barang.nama_barang')->label('Nama Barang')->searchable()->sortable(),
-            Tables\Columns\TextColumn::make('jumlah_masuk')->label('Jumlah Masuk (/Box)')->sortable(),
+                ->searchable(),
+            Tables\Columns\TextColumn::make('barang.nama_barang')->label('Nama Barang')->searchable()->limit(40)->wrap()->grow(false),
+            Tables\Columns\TextColumn::make('jumlah_masuk')->label('Jumlah Masuk (/Box)'),
             Tables\Columns\TextColumn::make('total_harga')->money('IDR'),
         ])
             ->filters([
                 //
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
+                Tables\Actions\ViewAction::make()->iconButton(),
+                Tables\Actions\EditAction::make()->iconButton(),
+                Tables\Actions\DeleteAction::make()->iconButton(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

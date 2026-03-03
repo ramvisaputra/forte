@@ -46,28 +46,23 @@ class OutGoing extends ChartWidget
     protected function getData(): array
     {
         $year = $this->filter ?? now()->year;
-
         $rawData = \App\Models\BarangKeluar::selectRaw('MONTH(created_at) as month, COUNT(*) as total')
             ->whereYear('created_at', $year)
             ->groupByRaw('MONTH(created_at)')
             ->orderByRaw('MONTH(created_at)')
             ->get()
             ->keyBy('month');
-
         $data = [];
         $labels = [];
-
         for ($i = 1; $i <= 12; $i++) {
             $labels[] = \Carbon\Carbon::create()->month($i)->translatedFormat('F');
             $data[] = $rawData[$i]->total ?? 0;
         }
-
         return [
             'datasets' => [
                 [
                     'label' => 'Jumlah Transaksi Barang Keluar Tahun ' . $year,
                     'data' => $data,
-                    // 'backgroundColor' => '#dc2626',
                 ],
             ],
             'labels' => $labels,
@@ -78,6 +73,6 @@ class OutGoing extends ChartWidget
 
     protected function getType(): string
     {
-        return 'bar';
+        return 'line';
     }
 }

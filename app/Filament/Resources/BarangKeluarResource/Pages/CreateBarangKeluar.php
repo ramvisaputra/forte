@@ -9,10 +9,29 @@ use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Model;
 use App\Filament\Resources\BarangKeluarResource;
+use Filament\Support\Exceptions\Halt;
 
 class CreateBarangKeluar extends CreateRecord
 {
     protected static string $resource = BarangKeluarResource::class;
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        $barang = Barang::find($data['id_barang']);
+        $stokAsli = $barang->stok;
+
+        if ($data['jumlah_keluar'] > $stokAsli) {
+            Notification::make()
+                ->title('Stok tidak mencukupi')
+                ->body("Stok tersedia hanya {$stokAsli} unit.")
+                ->danger()
+                ->send();
+
+            throw new Halt();
+        }
+
+        return $data;
+    }
 
     public function getHeading(): string
     {

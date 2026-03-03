@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\BarangResource\RelationManagers;
 use Filament\Forms\Components\Select;
 use PhpParser\Node\Stmt\Label;
+use Filament\Support\RawJs;
 
 class BarangResource extends Resource
 {
@@ -74,27 +75,39 @@ class BarangResource extends Resource
                     ->maxLength(255),
 
                 Forms\Components\TextInput::make('harga_masuk')
-                    ->numeric()
-                    ->minValue(0)
+                    ->label('Harga Masuk')
                     ->required()
-                    ->nullable(),
+                    ->live()
+                    ->afterStateUpdated(function ($state, callable $set) {
+                        if (!$state) {
+                            $set('biaya_pesan', null);
+                            return;
+                        }
 
-                Forms\Components\TextInput::make('harga_keluar')
-                    ->numeric()
-                    ->minValue(0)
-                    ->required()
-                    ->nullable(),
+                        // Ambil angka murni
+                        $hargaMasuk = (int) preg_replace('/[^0-9]/', '', $state);
+
+                        // Hitung 22%
+                        $biayaPesan = round($hargaMasuk * 0.22);
+
+                        // Set biaya pesan dengan format ribuan
+                        $set('biaya_pesan', number_format($biayaPesan, 0, ',', '.'));
+                    })
+                    ->dehydrateStateUsing(fn($state) => preg_replace('/[^0-9]/', '', $state)),
 
                 Forms\Components\TextInput::make('biaya_pesan')
-                    ->numeric()
-                    ->integer()
-                    ->minValue(0)
+                    ->label('Biaya Pesan (22%)')
+                    ->readOnly()
+                    ->mask(RawJs::make('$money($input, ".")'))
+                    ->dehydrateStateUsing(fn($state) => str_replace('.', '', $state))
                     ->required(),
 
                 Forms\Components\TextInput::make('biaya_simpan')
-                    ->numeric()
-                    ->integer()
+                    //->numeric()
+                    //->integer()
                     ->minValue(0)
+                    ->mask(RawJs::make('$money($input, ".")'))
+                    ->dehydrateStateUsing(fn($state) => str_replace('.', '', $state))
                     ->required(),
 
                 Forms\Components\TextInput::make('stok_minimum')
@@ -119,43 +132,70 @@ class BarangResource extends Resource
             ->columns([
                 Tables\Columns\TextColumn::make('id_barang')
                     ->label('Id Barang')
-                    ->sortable(),
+                    ->alignCenter()
+                    ->sortable()
+                    ->limit(4)
+                    ->wrap()
+                    ->grow(false),
+
                 Tables\Columns\TextColumn::make('nama_barang')
                     ->label('Nama Barang')
-                    ->searchable(),
+                    ->searchable()
+                    ->wrap()
+                    ->limit(7)
+                    ->grow(false), // ⬅️ SATU-SATUNYA KOLUM YANG BOLEH MELEBAR
+
                 Tables\Columns\TextColumn::make('kategori.nama_kategori')
-                    ->label('Nama Kategori')
-                    ->sortable(),
+                    ->label('Kategori')
+                    ->wrap()
+                    ->limit(7)
+                    ->grow(false),
+
                 Tables\Columns\TextColumn::make('harga_masuk')
                     ->label('Harga Masuk')
                     ->money('IDR')
-                    ->sortable(),
+                    ->alignRight()
+                    ->grow(false),
+
                 Tables\Columns\TextColumn::make('harga_keluar')
                     ->label('Harga Keluar')
                     ->money('IDR')
-                    ->sortable(),
-                // Tables\Columns\TextColumn::make('leadtime')
-                //     ->numeric()
-                //     ->sortable(),
+                    ->alignRight()
+                    ->grow(false),
+
                 Tables\Columns\TextColumn::make('biaya_pesan')
                     ->label('Biaya Pesan')
                     ->money('IDR')
-                    ->sortable(),
+                    ->alignRight()
+                    ->grow(false),
+
                 Tables\Columns\TextColumn::make('biaya_simpan')
                     ->label('Biaya Simpan')
                     ->money('IDR')
-                    ->sortable(),
+                    ->alignRight()
+                    ->grow(false),
+
                 Tables\Columns\TextColumn::make('stok_minimum')
+                    ->label('Stok Min')
                     ->numeric()
-                    ->sortable(),
+                    ->alignCenter()
+                    ->limit(4)
+                    ->wrap()
+                    ->grow(false),
+
                 Tables\Columns\TextColumn::make('stok')
                     ->label('Stok (/Box)')
                     ->numeric()
-                    ->sortable(),
+                    ->alignCenter()
+                    ->limit(4)
+                    ->wrap()
+                    ->grow(false),
+
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
+
                 Tables\Columns\TextColumn::make('updated_at')
                     ->dateTime()
                     ->sortable()
@@ -165,9 +205,9 @@ class BarangResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
+                Tables\Actions\ViewAction::make()->iconButton(),
+                Tables\Actions\EditAction::make()->iconButton(),
+                Tables\Actions\DeleteAction::make()->iconButton()
                     ->requiresConfirmation()
                     ->modalHeading('Penghapusan Tidak Diizinkan')
                     ->modalDescription(function ($record) {
@@ -181,11 +221,11 @@ class BarangResource extends Resource
 
                         return 'Apakah Anda yakin ingin menghapus barang ini?';
                     })
-                    // ->disabled(
-                    //     fn($record) =>
-                    //     $record->barangMasuks()->exists() ||
-                    //         $record->barangKeluars()->exists()
-                    // ),
+                // ->disabled(
+                //     fn($record) =>
+                //     $record->barangMasuks()->exists() ||
+                //         $record->barangKeluars()->exists()
+                // ),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([

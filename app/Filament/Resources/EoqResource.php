@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Notifications\Notification;
+use App\Filament\Resources\EoqResource\Pages;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Resources\EoqResource\RelationManagers;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class EoqResource extends Resource
 {
@@ -241,111 +245,155 @@ class EoqResource extends Resource
                             ->send();
                     }),
 
-                /* ================= DOWNLOAD CSV (TETAP ADA) ================= */
+                /* ================= DOWNLOAD PDF ================= */
 
-                Action::make('download_csv')
-                    ->label('Download CSV')
-                    ->icon('heroicon-o-arrow-down-tray')
+                Action::make('download_pdf')
+                    ->label('Download PDF')
+                    ->icon('heroicon-o-document-arrow-down')
                     ->color('info')
                     ->action(function ($livewire) {
 
+                        // ===============================
+                        // Ambil filter aktif
+                        // ===============================
                         $filters  = $livewire->tableFilters ?? [];
                         $tahun    = $filters['tahun']['value'] ?? now()->year;
                         $kategori = $filters['id_kategori']['value'] ?? null;
 
-                        $filename = 'perhitungan_eoq_' . now()->format('YmdHis') . '.csv';
+                        // ===============================
+                        // QUERY EOQ (SEMUA DIBULATKAN)
+                        // ===============================
+                        $query = Barang::query()
+                            ->leftJoinSub(
+                                DB::table('barang_keluar')
+                                    ->select(
+                                        'id_barang',
+                                        DB::raw('SUM(jumlah_keluar) AS permintaan_tahunan')
+                                    )
+                                    ->whereYear('tgl_keluar', $tahun)
+                                    ->groupBy('id_barang'),
+                                'bk',
+                                'barang.id_barang',
+                                '=',
+                                'bk.id_barang'
+                            )
+                            ->leftJoin('kategori', 'barang.id_kategori', '=', 'kategori.id_kategori')
+                            ->select(
+                                'barang.id_barang',
+                                'barang.nama_barang',
+                                DB::raw('IFNULL(bk.permintaan_tahunan,0) AS permintaan_tahunan'),
+                                'barang.biaya_pesan',
+                                'barang.biaya_simpan',
 
-                        return response()->streamDownload(function () use ($tahun, $kategori) {
+                                // EOQ (dibulatkan ke atas)
+                                DB::raw("
+                    CASE
+                        WHEN barang.biaya_simpan > 0
+                             AND IFNULL(bk.permintaan_tahunan,0) > 0
+                        THEN CEILING(
+                            SQRT(
+                                (2 * bk.permintaan_tahunan * barang.biaya_pesan)
+                                / barang.biaya_simpan
+                            )
+                        )
+                        ELSE 0
+                    END AS eoq
+                "),
 
-                            $file = fopen('php://output', 'w');
-                            fwrite($file, "\xEF\xBB\xBF");
-
-                            fputcsv($file, [
-                                'ID Barang',
-                                'Nama Barang',
-                                'Kategori',
-                                'Permintaan Tahunan',
-                                'Biaya Pesan',
-                                'Biaya Simpan',
-                                'EOQ',
-                                'Frekuensi Pesan',
-                                'Total Pemesanan',
-                                'Tahun'
-                            ]);
-
-                            $query = Barang::query()
-                                ->leftJoinSub(
-                                    DB::table('barang_keluar')
-                                        ->select(
-                                            'id_barang',
-                                            DB::raw('SUM(jumlah_keluar) AS permintaan_tahunan')
-                                        )
-                                        ->whereYear('tgl_keluar', $tahun)
-                                        ->groupBy('id_barang'),
-                                    'bk',
-                                    'barang.id_barang',
-                                    '=',
-                                    'bk.id_barang'
+                                // Frekuensi Pesan (bulat)
+                                DB::raw("
+                    CASE
+                        WHEN barang.biaya_simpan > 0
+                             AND IFNULL(bk.permintaan_tahunan,0) > 0
+                        THEN CEILING(
+                            IFNULL(bk.permintaan_tahunan,0) /
+                            CEILING(
+                                SQRT(
+                                    (2 * bk.permintaan_tahunan * barang.biaya_pesan)
+                                    / barang.biaya_simpan
                                 )
-                                ->leftJoin('kategori', 'barang.id_kategori', '=', 'kategori.id_kategori')
-                                ->select(
-                                    'barang.id_barang',
-                                    'barang.nama_barang',
-                                    'kategori.nama_kategori',
-                                    DB::raw('IFNULL(bk.permintaan_tahunan,0) AS permintaan_tahunan'),
-                                    'barang.biaya_pesan',
-                                    'barang.biaya_simpan',
-                                    DB::raw("
-                                        CASE
-                                            WHEN barang.biaya_simpan > 0
-                                                 AND IFNULL(bk.permintaan_tahunan,0) > 0
-                                            THEN ROUND(
-                                                SQRT(
-                                                    (2 * bk.permintaan_tahunan * barang.biaya_pesan)
-                                                    / barang.biaya_simpan
-                                                ), 2
-                                            )
-                                            ELSE 0
-                                        END AS eoq
-                                    ")
-                                );
+                            )
+                        )
+                        ELSE 0
+                    END AS frekuensi_pesan
+                "),
 
-                            if ($kategori) {
-                                $query->where('barang.id_kategori', $kategori);
-                            }
+                                // Total Pemesanan (bulat)
+                                DB::raw("
+                    CASE
+                        WHEN barang.biaya_simpan > 0
+                             AND IFNULL(bk.permintaan_tahunan,0) > 0
+                        THEN
+                            CEILING(
+                                IFNULL(bk.permintaan_tahunan,0) /
+                                CEILING(
+                                    SQRT(
+                                        (2 * bk.permintaan_tahunan * barang.biaya_pesan)
+                                        / barang.biaya_simpan
+                                    )
+                                )
+                            )
+                            *
+                            CEILING(
+                                SQRT(
+                                    (2 * bk.permintaan_tahunan * barang.biaya_pesan)
+                                    / barang.biaya_simpan
+                                )
+                            )
+                        ELSE 0
+                    END AS total_pemesanan
+                ")
+                            );
 
-                            foreach ($query->get() as $row) {
-                                fputcsv($file, [
-                                    $row->id_barang,
-                                    $row->nama_barang,
-                                    $row->nama_kategori,
-                                    $row->permintaan_tahunan,
-                                    $row->biaya_pesan,
-                                    $row->biaya_simpan,
-                                    $row->eoq,
-                                    $row->frekuensi_pesan,
-                                    $row->total_pemesanan,
-                                    $tahun
-                                ]);
-                            }
+                        if ($kategori) {
+                            $query->where('barang.id_kategori', $kategori);
+                        }
 
-                            fclose($file);
-                        }, $filename);
+                        $data = $query->get();
+
+                        // ===============================
+                        // Generate PDF
+                        // ===============================
+                        $pdf = Pdf::setOptions([
+                            'defaultFont' => 'dejavu sans',
+                        ])
+                            ->loadView('pdf.laporan-eoq', [
+                                'data'  => $data,
+                                'tahun' => $tahun,
+                                'cetak' => now()->format('d-m-Y H:i:s'),
+                            ])
+                            ->setPaper('A4', 'landscape');
+
+                        return response()->streamDownload(
+                            fn() => print($pdf->output()),
+                            'laporan_eoq_' . $tahun . '_' . now()->format('YmdHis') . '.pdf'
+                        );
                     }),
             ])
 
             /* ================= KOLOM ================= */
             ->defaultSort(null)
             ->columns([
-                Tables\Columns\TextColumn::make('id_barang')->label('ID'),
-                Tables\Columns\TextColumn::make('barang.nama_barang')->label('Nama Barang')->searchable(),
+                Tables\Columns\TextColumn::make('id_barang')->label('Id Barang')->sortable(),
+                Tables\Columns\TextColumn::make('barang.nama_barang')->label('Nama Barang')->searchable()->limit(10)->wrap()->grow(false),
                 // Tables\Columns\TextColumn::make('kategori.nama_kategori')->label('Kategori'),
                 Tables\Columns\TextColumn::make('permintaan_tahunan')->label('Permintaan Tahunan'),
                 Tables\Columns\TextColumn::make('biaya_pesan')->money('IDR'),
                 Tables\Columns\TextColumn::make('biaya_simpan')->money('IDR'),
-                Tables\Columns\TextColumn::make('nilai_eoq')->label('EOQ'),
-                Tables\Columns\TextColumn::make('frekuensi_pesan')->label('Frekuensi Pesan (kali/tahun)')->numeric(2),
-                Tables\Columns\TextColumn::make('total_pemesanan')->label('Total Pemesanan Tahunan'),
+                Tables\Columns\TextColumn::make('nilai_eoq')
+                    ->label('EOQ')
+                    ->sortable()
+                    ->formatStateUsing(function ($state) {
+                        return $state
+                            ? number_format($state, 0, ',', '.')
+                            : 'EOQ belum dihitung';
+                    }),
+                    // ->color(
+                    //     fn($record) =>
+                    //     $record->nilai_eoq ? 'success' : 'danger'
+                    // ),
+                Tables\Columns\TextColumn::make('frekuensi_pesan')->label('Frekuensi Pesan (kali/tahun)')->numeric(0),
+                Tables\Columns\TextColumn::make('total_pemesanan')->label('Total Pemesanan Tahunan')->numeric(0),
 
             ])
 

@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Auth;
 
 class UpdateTerbaruBarang extends BaseWidget
 {
-    protected static ?string $heading = 'Update Terbaru Barang';
+    protected static ?string $heading = 'Transaksi Barang Terbaru';
 
     protected static ?int $sort = 1;
 

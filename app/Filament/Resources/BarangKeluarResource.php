@@ -18,6 +18,7 @@ use App\Filament\Resources\BarangKeluarResource\RelationManagers;
 use Filament\Notifications\Notification;
 use Filament\Tables\Actions\DeleteAction;
 use Filament\Support\Exceptions\Halt;
+use Filament\Support\RawJs;
 
 class BarangKeluarResource extends Resource
 {
@@ -87,7 +88,7 @@ class BarangKeluarResource extends Resource
                         $barang = \App\Models\Barang::where('id_barang', $state)->first();
 
                         if ($barang) {
-                            $set('harga_barang', $barang->harga_keluar);
+                            $set('harga_barang', number_format($barang->harga_keluar, 0, ',', '.'));
                             $set('total_harga', null);
                             $set('stok_barang', $barang->stok);
                         }
@@ -104,13 +105,14 @@ class BarangKeluarResource extends Resource
                     ->label('Harga Barang')
                     ->numeric()
                     ->disabled()
-                    // ->readOnly()
-                    ->dehydrated(false),
+                    ->dehydrated()
+                    ->dehydrateStateUsing(fn($state) => str_replace('.', '', $state)),
 
                 Forms\Components\TextInput::make('jumlah_keluar')
                     ->label('Jumlah Keluar (/Box)')
                     ->numeric()
                     ->required()
+                    ->live()
                     ->minValue(1)
                     ->rule('gt:0')
                     ->reactive()
@@ -153,7 +155,11 @@ class BarangKeluarResource extends Resource
                         // }
 
                         // Hitung total harga
-                        $set('total_harga', $state * $barang->harga_keluar);
+                        // Hitung total harga
+                        $total = $state * $barang->harga_keluar;
+
+                        // tampilkan dengan titik
+                        $set('total_harga', number_format($total, 0, ',', '.'));
                     }),
 
                 // ->afterStateUpdated(function ($state, callable $set, callable $get) {
@@ -175,10 +181,12 @@ class BarangKeluarResource extends Resource
 
                 Forms\Components\TextInput::make('total_harga')
                     ->label('Total Harga')
-                    ->numeric()
                     ->required()
                     ->live()
-                    ->readOnly(),
+                    ->disabled()
+                    ->dehydrated()
+                    ->dehydrateStateUsing(fn($state) => str_replace('.', '', $state))
+                    ->required()
             ]);
     }
 
@@ -195,37 +203,35 @@ class BarangKeluarResource extends Resource
                     ->label('Tanggal Keluar')
                     ->date()
                     ->searchable()
-                    ->sortable()
                     ->date('j M Y'),
 
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Dicatat Oleh')
-                    ->searchable()
-                    ->sortable(),
+                    ->searchable(),
 
                 Tables\Columns\TextColumn::make('barang.nama_barang')
                     ->label('Nama Barang')
                     ->searchable()
-                    ->sortable(),
+                    ->limit(40)
+                    ->wrap()
+                    ->grow(false),
 
                 Tables\Columns\TextColumn::make('jumlah_keluar')
                     ->label('Jumlah Keluar (/Box)')
-                    ->searchable()
-                    ->sortable(),
+                    ->searchable(),
 
                 Tables\Columns\TextColumn::make('total_harga')
                     ->label('Total Harga')
                     ->money('IDR')
-                    ->searchable()
-                    ->sortable(),
+                    ->searchable(),
             ])
             ->filters([
                 //
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make()
+                Tables\Actions\ViewAction::make()->iconButton(),
+                Tables\Actions\EditAction::make()->iconButton(),
+                Tables\Actions\DeleteAction::make()->iconButton()
                     ->before(function ($record) {
 
                         DB::transaction(function () use ($record) {

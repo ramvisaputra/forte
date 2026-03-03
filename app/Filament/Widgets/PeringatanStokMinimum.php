@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Models\Barang;
+use App\Models\Eoq;
 use Filament\Tables;
 use Filament\Widgets\TableWidget;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,12 +22,9 @@ class PeringatanStokMinimum extends TableWidget
     protected function getTableQuery(): Builder
     {
         return Barang::query()
+            ->with('eoqs')
             ->whereColumn('stok', '<=', 'stok_minimum');
     }
-
-    /**
-     * 🔴 INI KUNCI UTAMA
-     */
     public function getTableRecordKey($record): string
     {
         return $record->id_barang;
@@ -46,6 +44,20 @@ class PeringatanStokMinimum extends TableWidget
 
             Tables\Columns\TextColumn::make('stok_minimum')
                 ->label('Stok Minimum'),
+
+            Tables\Columns\TextColumn::make('jumlah_pemesanan_optimal')
+                ->label('Jumlah Pemesanan Optimal')
+                ->getStateUsing(function ($record) {
+                    $eoq = $record->eoqs->sortByDesc('tahun')->first();
+
+                    if (! $eoq || empty($eoq->nilai_eoq)) {
+                        return '-';
+                    }
+
+                    return number_format(ceil($eoq->nilai_eoq), 0) . ' box';
+                })
+                ->badge()
+                ->color('success'),
         ];
     }
 

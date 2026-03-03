@@ -17,6 +17,7 @@ use App\Filament\Resources\LaporanBarangMasukResource\Pages;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 
 class LaporanBarangMasukResource extends Resource
@@ -72,74 +73,47 @@ class LaporanBarangMasukResource extends Resource
 
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Dicatat Oleh')
-                    ->sortable()
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('tgl_masuk')
                     ->label('Tanggal Masuk')
                     ->date()
-                    ->sortable()
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('barang.nama_barang')
                     ->label('Nama Barang')
-                    ->sortable()
                     ->searchable(),
 
                 Tables\Columns\TextColumn::make('jumlah_masuk')
-                    ->label('Jumlah Masuk (/Box)')
-                    ->sortable(),
+                    ->label('Jumlah Masuk (/Box)'),
 
                 Tables\Columns\TextColumn::make('total_harga')
                     ->label('Total Harga')
-                    ->money('IDR')
-                    ->sortable(),
+                    ->money('IDR'),
             ])
 
             ->headerActions([
-                Action::make('download_csv')
-                    ->label('Download CSV')
-                    ->icon('heroicon-o-arrow-down-tray')
+                Action::make('download_pdf')
+                    ->label('Download PDF')
+                    ->icon('heroicon-o-document-arrow-down')
                     ->color('success')
                     ->action(function ($livewire) {
 
-                        $filename = 'laporan_barang_masuk_' . now()->format('YmdHis') . '.csv';
+                        $data = $livewire->getFilteredTableQuery()
+                            ->with(['user', 'barang.kategori'])
+                            ->get();
 
-                        return response()->streamDownload(function () use ($livewire) {
+                        $pdf = Pdf::loadView('pdf.laporan-barang-masuk', [
+                            'data' => $data,
+                            'tanggal_cetak' => now()->format('d-m-Y H:i:s'),
+                        ])->setPaper('A4', 'landscape');
 
-                            $file = fopen('php://output', 'w');
-                            fwrite($file, "\xEF\xBB\xBF");
+                        $filename = 'laporan_barang_masuk_' . now()->format('YmdHis') . '.pdf';
 
-                            fputcsv($file, [
-                                'ID Masuk',
-                                'User',
-                                'Tanggal Masuk',
-                                'Nama Barang',
-                                'Kategori',
-                                'Jumlah Masuk',
-                                'Total Harga',
-                            ]);
-
-                            /** 🔑 QUERY SUDAH TERFILTER */
-                            $query = $livewire->getFilteredTableQuery()
-                                ->with(['user', 'barang.kategori']);
-
-                            $query->chunk(200, function ($rows) use ($file) {
-                                foreach ($rows as $row) {
-                                    fputcsv($file, [
-                                        $row->id_masuk,
-                                        optional($row->user)->username,
-                                        $row->tgl_masuk,
-                                        optional($row->barang)->nama_barang,
-                                        optional($row->barang?->kategori)->nama_kategori,
-                                        $row->jumlah_masuk,
-                                        $row->total_harga,
-                                    ]);
-                                }
-                            });
-
-                            fclose($file);
-                        }, $filename);
+                        return response()->streamDownload(
+                            fn() => print($pdf->output()),
+                            $filename
+                        );
                     })
             ])
 

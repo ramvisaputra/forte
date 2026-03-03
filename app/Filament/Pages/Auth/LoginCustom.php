@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Auth;
 
+use Dom\Text;
 use Filament\Forms\Components\Component;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\Auth\Login;
@@ -27,12 +28,18 @@ class LoginCustom extends Login
 
     protected function getLoginFormComponent(): Component
     {
-        return TextInput::make('login')
-            ->label(__('Nama / Email'))
-            ->required()
-            ->autocomplete()
-            ->autofocus()
-            ->extraInputAttributes(['tabindex' => 1]);
+        return 
+            TextInput::make('login')
+                ->label(__('Nama / Email'))
+                ->required()
+                ->autocomplete()
+                ->autofocus()
+                ->extraInputAttributes(['tabindex' => 1]);
+            TextInput::make('password')
+                ->label(__('Password'))
+                ->password()
+                ->required()
+                ->extraInputAttributes(['tabindex' => 2]);
     }
 
     protected function getCredentialsFromFormData(array $data): array

@@ -66,7 +66,6 @@ class InComing extends ChartWidget
                 [
                     'label' => 'Jumlah Transaksi Barang Masuk Tahun ' . $year,
                     'data' => $data,
-                    // 'backgroundColor' => '#16a34a', // tetap hijau (success)
                 ],
             ],
             'labels' => $labels,
@@ -75,6 +74,6 @@ class InComing extends ChartWidget
 
     protected function getType(): string
     {
-        return 'bar';
+        return 'line';
     }
 }
